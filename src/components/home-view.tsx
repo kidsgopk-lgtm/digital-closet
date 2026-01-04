@@ -6,12 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ClothingCard } from '@/components/clothing-card';
 import { UploadModal } from '@/components/upload-modal';
-import { ClothingItem } from '@/types/closet';
+import { ClothingItem, Outfit } from '@/types/closet';
 import { useClosetStore } from '@/store/closet-store';
 import { WeatherData } from '@/types/closet';
-
-// Type alias for the outfit type
-type Outfit = ReturnType<typeof useClosetStore.getState().generateOutfit>;
 
 export function HomeView() {
   const { clothingItems, currentWeather, userPreferences, generateOutfit, setCurrentWeather, updatePreferences, addClothing } = useClosetStore();
