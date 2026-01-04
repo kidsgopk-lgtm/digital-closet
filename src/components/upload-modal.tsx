@@ -1,0 +1,410 @@
+'use client';
+
+import * as React from 'react';
+import { Camera, Upload, X, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { toast } from '@/hooks/use-toast';
+import { ClothingCategory, ColorCategory, Material } from '@/types/closet';
+
+interface UploadModalProps {
+  onUpload: (item: {
+    name: string;
+    image: string;
+    category: ClothingCategory;
+    colors: ColorCategory[];
+    material: Material;
+  }) => void;
+  children: React.ReactNode;
+}
+
+export function UploadModal({ onUpload, children }: UploadModalProps) {
+  const [open, setOpen] = React.useState(false);
+  const [image, setImage] = React.useState<string>('');
+  const [name, setName] = React.useState('');
+  const [category, setCategory] = React.useState<ClothingCategory>('Top');
+  const [material, setMaterial] = React.useState<Material>('Medium');
+  const [selectedColors, setSelectedColors] = React.useState<ColorCategory[]>([]);
+  const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const colorOptions: ColorCategory[] = [
+    'Black', 'White', 'Gray', 'Brown', 'Beige',
+    'Red', 'Pink', 'Orange', 'Yellow',
+    'Green', 'Blue', 'Purple', 'Pattern', 'Multi'
+  ];
+
+  const categoryOptions: ClothingCategory[] = ['Top', 'Bottom', 'Shoe'];
+  const materialOptions: Material[] = ['Heavy', 'Medium', 'Light'];
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: 'File too large',
+          description: 'Please select an image under 5MB',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImage(reader.result as string);
+        const fileName = file.name.replace(/\.[^/.]+$/, '');
+        setName(fileName);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCameraCapture = async () => {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast({
+          title: 'Camera not supported',
+          description: 'Camera access is not available in this browser',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
+
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.play();
+
+      await new Promise((resolve) => {
+        video.onloadedmetadata = resolve;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(video, 0, 0);
+
+      const imageData = canvas.toDataURL('image/jpeg', 0.8);
+      setImage(imageData);
+      setName(`Photo_${Date.now()}`);
+
+      stream.getTracks().forEach(track => track.stop());
+
+      toast({
+        title: 'Photo captured',
+        description: 'Great! Now you can add details.',
+      });
+    } catch (error) {
+      console.error('Camera error:', error);
+      toast({
+        title: 'Camera error',
+        description: 'Unable to access camera. Please try using the upload option.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const toggleColor = (color: ColorCategory) => {
+    setSelectedColors(prev =>
+      prev.includes(color)
+        ? prev.filter(c => c !== color)
+        : [...prev, color]
+    );
+  };
+
+  const resetForm = () => {
+    setImage('');
+    setName('');
+    setCategory('Top');
+    setMaterial('Medium');
+    setSelectedColors([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleAnalyze = async () => {
+    if (!image) return;
+
+    setIsAnalyzing(true);
+    try {
+      const response = await fetch('/api/analyze-clothing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Analysis failed');
+      }
+
+      const data = await response.json();
+
+      if (data.category) {
+        setCategory(data.category);
+      }
+      if (data.colors && data.colors.length > 0) {
+        setSelectedColors(data.colors);
+      }
+      if (data.material) {
+        setMaterial(data.material);
+      }
+
+      toast({
+        title: 'Analysis complete!',
+        description: 'AI has detected the clothing details.',
+      });
+    } catch (error) {
+      console.error('Analysis error:', error);
+      toast({
+        title: 'Analysis failed',
+        description: 'Unable to analyze image. Please fill in details manually.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!image) {
+      toast({
+        title: 'Image required',
+        description: 'Please add a photo of your clothing item.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!name.trim()) {
+      toast({
+        title: 'Name required',
+        description: 'Please give your clothing item a name.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (selectedColors.length === 0) {
+      toast({
+        title: 'Color required',
+        description: 'Please select at least one color.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    onUpload({
+      name: name.trim(),
+      image,
+      category,
+      colors: selectedColors,
+      material,
+    });
+
+    toast({
+      title: 'Added to closet!',
+      description: 'Your item has been saved.',
+    });
+
+    resetForm();
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {children}
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Add to Your Closet</DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-4">
+            <Label>Photo</Label>
+            {!image ? (
+              <Card className="border-dashed">
+                <CardContent className="p-8">
+                  <div className="flex flex-col items-center justify-center gap-4">
+                    <div className="flex gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="gap-2"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Upload
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleCameraCapture}
+                        className="gap-2"
+                      >
+                        <Camera className="h-4 w-4" />
+                        Camera
+                      </Button>
+                    </div>
+                    <p className="text-sm text-muted-foreground text-center">
+                      Take a photo or upload from your gallery<br/>
+                      Max size: 5MB
+                    </p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="relative">
+                <img
+                  src={image}
+                  alt="Clothing item preview"
+                  className="w-full h-64 object-cover rounded-lg"
+                />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="icon"
+                  className="absolute top-2 right-2"
+                  onClick={() => setImage('')}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAnalyze}
+                    disabled={isAnalyzing}
+                    className="gap-2"
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      '✨ AI Detect'
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Change Photo
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="name">Name *</Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Blue Denim Jeans"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Category *</Label>
+            <div className="flex gap-2 flex-wrap">
+              {categoryOptions.map((cat) => (
+                <Badge
+                  key={cat}
+                  variant={category === cat ? 'default' : 'outline'}
+                  className="cursor-pointer text-sm px-4 py-2"
+                  onClick={() => setCategory(cat)}
+                >
+                  {cat}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Material (Weight) *</Label>
+            <div className="flex gap-2 flex-wrap">
+              {materialOptions.map((mat) => (
+                <Badge
+                  key={mat}
+                  variant={material === mat ? 'default' : 'outline'}
+                  className="cursor-pointer text-sm px-4 py-2"
+                  onClick={() => setMaterial(mat)}
+                >
+                  {mat}
+                </Badge>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Heavy: Sweaters, coats, thick pants | Medium: Regular shirts, pants | Light: T-shirts, shorts, light fabric
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Colors *</Label>
+            <div className="flex gap-2 flex-wrap">
+              {colorOptions.map((color) => (
+                <Badge
+                  key={color}
+                  variant={selectedColors.includes(color) ? 'default' : 'outline'}
+                  className="cursor-pointer text-sm px-3 py-1"
+                  onClick={() => toggleColor(color)}
+                >
+                  {color}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button type="submit" className="flex-1">
+              Add to Closet
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                resetForm();
+                setOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
