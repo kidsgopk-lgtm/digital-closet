@@ -10,9 +10,12 @@ import { ClothingItem } from '@/types/closet';
 import { useClosetStore } from '@/store/closet-store';
 import { WeatherData } from '@/types/closet';
 
+// Type alias for the outfit type
+type Outfit = ReturnType<typeof useClosetStore.getState().generateOutfit>;
+
 export function HomeView() {
   const { clothingItems, currentWeather, userPreferences, generateOutfit, setCurrentWeather, updatePreferences, addClothing } = useClosetStore();
-  const [currentOutfit, setCurrentOutfit] = React.useState<ReturnType<typeof useClosetStore.getState().generateOutfit>>(null);
+  const [currentOutfit, setCurrentOutfit] = React.useState<Outfit | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [locationError, setLocationError] = React.useState<string | null>(null);
 

@@ -11,6 +11,9 @@ import type {
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
 
+// Type alias for setTimeout return type
+type TimeoutId = number;
+
 type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
@@ -56,7 +59,7 @@ interface State {
   toasts: ToasterToast[]
 }
 
-const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+const toastTimeouts = new Map<string, TimeoutId>()
 
 const addToRemoveQueue = (toastId: string) => {
   if (toastTimeouts.has(toastId)) {
